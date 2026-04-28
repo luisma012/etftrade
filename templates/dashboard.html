@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETF Trader Dashboard</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #c9d1d9;
+    --muted:   #8b949e;
+    --green:   #3fb950;
+    --red:     #f85149;
+    --yellow:  #d29922;
+    --blue:    #58a6ff;
+    --purple:  #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 600; color: var(--blue); }
+  header h1 span { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+
+  #status-bar {
+    display: flex; gap: 20px; align-items: center; font-size: 12px; color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .dot-green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+  .dot-red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+  .dot-yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+  main { padding: 20px 24px; display: grid; gap: 20px; }
+
+  /* ── Top row ── */
+  .top-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .stat-card .value { font-size: 26px; font-weight: 700; }
+  .stat-card .sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Sentiment row ── */
+  .sentiment-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    align-items: center;
+  }
+  .sent-block .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .sent-block .value { font-size: 22px; font-weight: 700; }
+  .sent-block .badge {
+    display: inline-block; margin-top: 5px; padding: 2px 8px;
+    border-radius: 12px; font-size: 11px; font-weight: 600;
+  }
+
+  /* Fear & Greed gauge */
+  .gauge-wrap { text-align: center; }
+  .gauge-wrap canvas { max-width: 200px; }
+  .gauge-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Scores table ── */
+  .scores-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .card-header h2 { font-size: 15px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; padding: 8px 10px;
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 10px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2128; }
+
+  .ticker-badge {
+    font-weight: 700; font-size: 13px; color: var(--blue);
+    background: #1a2332; padding: 2px 8px; border-radius: 4px;
+  }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+  .score-bar {
+    flex: 1; height: 6px; background: #21262d; border-radius: 3px; overflow: hidden;
+  }
+  .score-bar-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+  .score-num { font-size: 13px; font-weight: 700; min-width: 34px; text-align: right; }
+
+  .signal {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; letter-spacing: .5px;
+  }
+  .signal-BUY  { background: #1a3a24; color: var(--green); }
+  .signal-SELL { background: #3a1a1a; color: var(--red); }
+  .signal-HOLD { background: #2a2a1a; color: var(--yellow); }
+
+  /* ── Pending trades ── */
+  .pending-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .pending-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .pending-item {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--green);
+    border-radius: 6px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .pending-info { flex: 1; }
+  .pending-info .pticker { font-size: 15px; font-weight: 700; color: var(--blue); }
+  .pending-info .pmeta   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .btn-group { display: flex; gap: 8px; }
+  button {
+    border: none; border-radius: 6px; padding: 6px 14px;
+    font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+  }
+  button:hover { opacity: .8; }
+  .btn-approve { background: var(--green);  color: #0d1117; }
+  .btn-reject  { background: var(--red);    color: #fff; }
+  .btn-scan    { background: var(--blue);   color: #0d1117; font-size: 12px; padding: 6px 16px; }
+  .btn-retrain { background: var(--purple); color: #0d1117; font-size: 12px; padding: 6px 16px; }
+
+  .empty-msg { color: var(--muted); font-size: 13px; padding: 10px 0; }
+
+  /* ── Portfolio ── */
+  .portfolio-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  /* ── Circuit breaker ── */
+  .cb-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600; padding: 4px 10px;
+    border-radius: 12px;
+  }
+  .cb-CLOSED  { background: #1a3a24; color: var(--green); }
+  .cb-OPEN    { background: #3a1a1a; color: var(--red); }
+  .cb-UNKNOWN { background: #2a2a1a; color: var(--yellow); }
+
+  /* ── Kill Switch ── */
+  #kill-switch-btn {
+    position: fixed; top: 14px; right: 20px; z-index: 1000;
+    background: #6e1a1a; color: #fff;
+    border: 1px solid #f85149; border-radius: 6px;
+    padding: 7px 16px; font-size: 12px; font-weight: 700;
+    cursor: pointer; letter-spacing: .3px;
+    transition: background .15s, transform .1s;
+  }
+  #kill-switch-btn:hover { background: #a02020; }
+  #kill-switch-btn.armed {
+    background: var(--red); animation: pulse-red 0.6s infinite alternate;
+  }
+  @keyframes pulse-red {
+    from { box-shadow: 0 0 6px #f85149; }
+    to   { box-shadow: 0 0 18px #f85149; }
+  }
+
+  /* ── Kill Switch Modal ── */
+  #ks-overlay {
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,.75); align-items: center; justify-content: center;
+  }
+  #ks-overlay.show { display: flex; }
+  #ks-modal {
+    background: var(--surface); border: 1px solid #f85149;
+    border-radius: 10px; padding: 28px 32px; min-width: 380px; max-width: 520px;
+  }
+  #ks-modal h2 { color: var(--red); font-size: 18px; margin-bottom: 12px; }
+  #ks-modal .ks-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+  #ks-modal .ks-ok   { color: var(--green); font-weight: 700; }
+  #ks-modal .ks-err  { color: var(--red);   font-weight: 700; }
+  #ks-modal .ks-spin { color: var(--yellow); }
+  #ks-close { margin-top: 20px; background: #2a2a2a; color: var(--text); padding: 8px 20px; border-radius: 6px; }
+
+  footer {
+    text-align: center; padding: 16px;
+    font-size: 11px; color: var(--muted);
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+  }
+
+  #toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: #238636; color: #fff;
+    padding: 10px 18px; border-radius: 8px;
+    font-size: 13px; font-weight: 600;
+    display: none; z-index: 999;
+    box-shadow: 0 4px 12px rgba(0,0,0,.5);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ETF Trader <span>50% Technical · 50% ML · No LLM</span></h1>
+  <div id="status-bar">
+    <span><span class="dot dot-yellow" id="market-dot"></span><span id="market-status">Cargando...</span></span>
+    <span><span class="dot dot-yellow" id="cb-dot"></span>CB: <span id="cb-badge" class="cb-status cb-UNKNOWN">...</span></span>
+    <span id="last-update" style="color:var(--muted)">--</span>
+    <button class="btn-scan" onclick="triggerScan()">Escanear Ahora</button>
+    <button class="btn-retrain" onclick="triggerRetrain()">Reentrenar ML</button>
+  </div>
+</header>
+
+<!-- Kill Switch button (fixed, always visible) -->
+<button id="kill-switch-btn" onclick="killSwitchClick()">🚨 KILL SWITCH</button>
+
+<!-- Kill Switch modal -->
+<div id="ks-overlay">
+  <div id="ks-modal">
+    <h2>🚨 KILL SWITCH</h2>
+    <div id="ks-body"><div class="ks-row ks-spin">Ejecutando...</div></div>
+    <button id="ks-close" onclick="document.getElementById('ks-overlay').classList.remove('show')">Cerrar</button>
+  </div>
+</div>
+
+<main>
+
+  <!-- Top KPIs -->
+  <div class="top-row">
+    <div class="stat-card">
+      <div class="label">Portfolio Value</div>
+      <div class="value" id="kpi-portfolio">$—</div>
+      <div class="sub">broker actual</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Fear & Greed</div>
+      <div class="value" id="kpi-fg">—</div>
+      <div class="sub" id="kpi-fg-label">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">SPY RSI</div>
+      <div class="value" id="kpi-rsi">—</div>
+      <div class="sub" id="kpi-rsi-signal">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Señales BUY</div>
+      <div class="value" id="kpi-buys" style="color:var(--green)">—</div>
+      <div class="sub">pendientes aprobación</div>
+    </div>
+  </div>
+
+  <!-- Sentiment detail -->
+  <div class="sentiment-row">
+    <div class="sent-block">
+      <div class="label">Sentimiento de Mercado</div>
+      <div class="value" id="sent-combined">—</div>
+      <div><span class="badge" id="sent-badge" style="background:#2a2a1a;color:var(--yellow)">—</span></div>
+    </div>
+    <div class="gauge-wrap">
+      <canvas id="fg-gauge" width="200" height="110"></canvas>
+      <div class="gauge-label" id="fg-gauge-label">Fear & Greed</div>
+    </div>
+    <div class="sent-block" style="text-align:right">
+      <div class="label">SPY RSI (proxy)</div>
+      <div class="value" id="sent-rsi">—</div>
+      <div class="sub" id="sent-rsi-sub">—</div>
+    </div>
+  </div>
+
+  <!-- Scores table -->
+  <div class="scores-card">
+    <div class="card-header">
+      <h2>Scores ETF Universe</h2>
+      <span style="font-size:12px;color:var(--muted)" id="scores-ts">—</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Score Compuesto</th>
+          <th>Técnico</th>
+          <th>ML (XGB+RF)</th>
+          <th>RSI</th>
+          <th>Señal</th>
+        </tr>
+      </thead>
+      <tbody id="scores-body">
+        <tr><td colspan="6" style="color:var(--muted);padding:20px">Cargando scores...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pending + Portfolio side by side -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+    <div class="pending-card">
+      <div class="card-header">
+        <h2>Trades Pendientes</h2>
+        <span style="font-size:11px;color:var(--muted)">aprobación manual requerida</span>
+      </div>
+      <div class="pending-list" id="pending-list">
+        <div class="empty-msg">Sin trades pendientes.</div>
+      </div>
+    </div>
+
+    <div class="portfolio-card">
+      <div class="card-header">
+        <h2>Portfolio Actual</h2>
+        <span style="font-size:13px;font-weight:700;color:var(--blue)" id="pf-value">$—</span>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Ticker</th><th>Cantidad</th><th>Precio Compra</th><th>P&L</th></tr>
+        </thead>
+        <tbody id="positions-body">
+          <tr><td colspan="4" style="color:var(--muted);padding:12px">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>ETF Trader · Puerto 5010 · Sin LLM · Fear &amp; Greed + SPY RSI · XGBoost + RandomForest</footer>
+<div id="toast"></div>
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function scoreColor(s) {
+  if (s >= 65) return '#3fb950';
+  if (s >= 45) return '#d29922';
+  return '#f85149';
+}
+
+function fgColor(s) {
+  if (s <= 25) return '#f85149';
+  if (s <= 45) return '#e3794a';
+  if (s <= 55) return '#d29922';
+  if (s <= 75) return '#7cc55a';
+  return '#3fb950';
+}
+
+function toast(msg, color='#238636') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = color;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
+}
+
+function fmt(n, dec=1) {
+  return n != null ? Number(n).toFixed(dec) : '—';
+}
+
+// ── Fear & Greed Gauge (canvas arc) ─────────────────────────────────────────
+
+function drawGauge(score) {
+  const canvas = document.getElementById('fg-gauge');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H - 10, r = 80;
+  const startA = Math.PI, endA = 0;
+
+  // Background arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startA, endA);
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 14;
+  ctx.stroke();
+
+  // Colored arc
+  const pct  = Math.max(0, Math.min(100, score)) / 100;
+  const arcE = startA + pct * Math.PI;
+  const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
+  grad.addColorStop(0,    '#f85149');
+  grad.addColorStop(0.25, '#e3794a');
+  grad.addColorStop(0.5,  '#d29922');
+  grad.addColorStop(0.75, '#7cc55a');
+  grad.addColorStop(1,    '#3fb950');
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startA, arcE);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 14;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Score text
+  ctx.fillStyle = fgColor(score);
+  ctx.font = 'bold 28px Segoe UI, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(score), cx, cy - 10);
+}
+
+// ── API calls ─────────────────────────────────────────────────────────────────
+
+async function fetchSentiment() {
+  try {
+    const r = await fetch('/api/sentiment');
+    const d = await r.json();
+
+    const fg  = d.fear_greed_score ?? 50;
+    const rsi = d.spy_rsi ?? 50;
+    const comb = (d.combined_sentiment ?? 0.5) * 100;
+
+    document.getElementById('kpi-fg').textContent       = fmt(fg, 0);
+    document.getElementById('kpi-fg').style.color       = fgColor(fg);
+    document.getElementById('kpi-fg-label').textContent = d.fear_greed_label ?? '—';
+    document.getElementById('kpi-rsi').textContent      = fmt(rsi, 1);
+    document.getElementById('kpi-rsi-signal').textContent = d.spy_rsi_signal ?? '—';
+
+    document.getElementById('sent-combined').textContent = fmt(comb, 1) + ' / 100';
+    document.getElementById('sent-rsi').textContent      = fmt(rsi, 1);
+    document.getElementById('sent-rsi-sub').textContent  = d.spy_rsi_signal ?? '—';
+
+    const badge = document.getElementById('sent-badge');
+    const bull  = d.market_bullish;
+    badge.textContent       = bull ? 'Mercado Alcista' : 'Mercado Bajista';
+    badge.style.background  = bull ? '#1a3a24' : '#3a1a1a';
+    badge.style.color       = bull ? '#3fb950' : '#f85149';
+
+    drawGauge(fg);
+    document.getElementById('fg-gauge-label').textContent = d.fear_greed_label ?? 'Fear & Greed';
+  } catch(e) {
+    console.error('sentiment error', e);
+  }
+}
+
+async function fetchHealth() {
+  try {
+    const r = await fetch('/health');
+    const d = await r.json();
+    const open = d.market_open;
+    document.getElementById('market-status').textContent = open ? 'Mercado Abierto' : 'Mercado Cerrado';
+    document.getElementById('market-dot').className = 'dot ' + (open ? 'dot-green' : 'dot-red');
+    document.getElementById('last-update').textContent = 'Actualizado: ' + new Date().toLocaleTimeString();
+  } catch(e) {}
+}
+
+async function fetchCircuit() {
+  try {
+    const r = await fetch('/api/circuit');
+    const d = await r.json();
+    const st = (d.status ?? 'UNKNOWN').toUpperCase();
+    const el = document.getElementById('cb-badge');
+    el.textContent = st;
+    el.className   = 'cb-status cb-' + (st === 'CLOSED' ? 'CLOSED' : st === 'OPEN' ? 'OPEN' : 'UNKNOWN');
+    document.getElementById('cb-dot').className = 'dot ' + (st === 'CLOSED' ? 'dot-green' : 'dot-red');
+  } catch(e) {
+    document.getElementById('cb-badge').textContent = 'OFFLINE';
+  }
+}
+
+async function fetchScores() {
+  try {
+    const r = await fetch('/api/scores');
+    const d = await r.json();
+    const scores = d.scores ?? [];
+
+    const buys = scores.filter(s => s.signal === 'BUY').length;
+    document.getElementById('kpi-buys').textContent = buys;
+
+    if (scores.length) {
+      document.getElementById('scores-ts').textContent =
+        'Último: ' + new Date(scores[0].timestamp).toLocaleTimeString();
+    }
+
+    const tbody = document.getElementById('scores-body');
+    if (!scores.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);padding:20px">Sin datos.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = scores.map(s => {
+      const comp   = s.score ?? 0;
+      const tech   = s.technical?.score ?? 0;
+      const ml     = s.ml?.score ?? 0;
+      const rsi    = s.technical?.components?.rsi ?? '—';
+      const signal = s.signal ?? 'HOLD';
+      const color  = scoreColor(comp);
+
+      return `<tr>
+        <td><span class="ticker-badge">${s.ticker}</span></td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar">
+              <div class="score-bar-fill" style="width:${comp}%;background:${color}"></div>
+            </div>
+            <span class="score-num" style="color:${color}">${fmt(comp)}</span>
+          </div>
+        </td>
+        <td style="color:var(--muted)">${fmt(tech)}</td>
+        <td style="color:var(--purple)">${fmt(ml)}</td>
+        <td style="color:var(--muted)">${typeof rsi === 'number' ? fmt(rsi,1) : rsi}</td>
+        <td><span class="signal signal-${signal}">${signal}</span></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    console.error('scores error', e);
+  }
+}
+
+async function fetchPending() {
+  try {
+    const r = await fetch('/api/pending');
+    const d = await r.json();
+    const pending = d.pending ?? {};
+    const keys    = Object.keys(pending);
+
+    const list = document.getElementById('pending-list');
+    if (!keys.length) {
+      list.innerHTML = '<div class="empty-msg">Sin trades pendientes.</div>';
+      return;
+    }
+
+    list.innerHTML = keys.map(ticker => {
+      const t = pending[ticker];
+      return `<div class="pending-item">
+        <div class="pending-info">
+          <div class="pticker">${ticker}</div>
+          <div class="pmeta">
+            Score: <b>${fmt(t.score)}</b> &nbsp;|&nbsp;
+            Tech: ${fmt(t.technical?.score)} &nbsp;|&nbsp;
+            ML: ${fmt(t.ml?.score)} &nbsp;|&nbsp;
+            F&G: ${fmt(t.sentiment?.fear_greed,0)} (${t.sentiment?.fear_greed_label ?? ''})
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn-approve" onclick="approve('${ticker}')">✓ Aprobar</button>
+          <button class="btn-reject"  onclick="reject('${ticker}')">✕ Rechazar</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
+async function fetchPortfolio() {
+  try {
+    const r = await fetch('/api/portfolio');
+    const d = await r.json();
+
+    const val = d.portfolio_value ?? 0;
+    document.getElementById('kpi-portfolio').textContent = '$' + Number(val).toLocaleString('en-US', {minimumFractionDigits:2});
+    document.getElementById('pf-value').textContent      = '$' + Number(val).toLocaleString('en-US', {minimumFractionDigits:2});
+
+    const positions = d.positions ?? {};
+    const keys = Object.keys(positions);
+    const tbody = document.getElementById('positions-body');
+
+    if (!keys.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);padding:12px">Sin posiciones abiertas.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = keys.map(t => {
+      const p   = positions[t];
+      const pnl = p.unrealized_pnl ?? 0;
+      const color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const sign  = pnl >= 0 ? '+' : '';
+      return `<tr>
+        <td><span class="ticker-badge">${t}</span></td>
+        <td>${fmt(p.quantity, 4)}</td>
+        <td>$${fmt(p.avg_buy_price, 2)}</td>
+        <td style="color:${color};font-weight:700">${sign}$${fmt(pnl,2)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {}
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────────
+
+async function approve(ticker) {
+  try {
+    const r = await fetch(`/api/approve/${ticker}`, {method:'POST'});
+    const d = await r.json();
+    toast(d.status === 'ok' ? `✓ ${ticker} BUY ejecutado` : `Error: ${d.message}`,
+          d.status === 'ok' ? '#238636' : '#da3633');
+    refreshAll();
+  } catch(e) { toast('Error de red', '#da3633'); }
+}
+
+async function reject(ticker) {
+  try {
+    await fetch(`/api/reject/${ticker}`, {method:'POST'});
+    toast(`✕ ${ticker} rechazado`, '#6e7681');
+    fetchPending();
+  } catch(e) {}
+}
+
+async function triggerScan() {
+  toast('Escaneando...', '#1f6feb');
+  try {
+    const r = await fetch('/api/scan', {method:'POST'});
+    const d = await r.json();
+    toast('Escaneo completo', '#238636');
+    refreshAll();
+  } catch(e) { toast('Error en escaneo', '#da3633'); }
+}
+
+async function triggerRetrain() {
+  toast('Reentrenando modelos ML...', '#8957e5');
+  try {
+    const r = await fetch('/api/retrain', {method:'POST'});
+    const d = await r.json();
+    toast(d.message ?? 'Reentrenamiento completo', '#238636');
+  } catch(e) { toast('Error reentrenando', '#da3633'); }
+}
+
+// ── Refresh ──────────────────────────────────────────────────────────────────
+
+async function refreshAll() {
+  await Promise.all([
+    fetchHealth(),
+    fetchSentiment(),
+    fetchCircuit(),
+    fetchPending(),
+    fetchPortfolio(),
+  ]);
+}
+
+// Scores son lentos (descargan datos), se actualizan separado
+async function refreshScores() {
+  await fetchScores();
+}
+
+// Initial load
+refreshAll();
+refreshScores();
+
+// Auto-refresh: estado rápido cada 30s, scores cada 5min
+setInterval(refreshAll,   30_000);
+setInterval(refreshScores, 300_000);
+
+// ── Kill Switch ───────────────────────────────────────────────────────────────
+
+let _ksArmed = false;
+let _ksTimer = null;
+
+function killSwitchClick() {
+  const btn = document.getElementById('kill-switch-btn');
+  if (!_ksArmed) {
+    // First click: arm it
+    _ksArmed = true;
+    btn.classList.add('armed');
+    btn.textContent = '⚠️ CONFIRMAR — click de nuevo';
+    _ksTimer = setTimeout(() => {
+      _ksArmed = false;
+      btn.classList.remove('armed');
+      btn.textContent = '🚨 KILL SWITCH';
+    }, 4000);
+  } else {
+    // Second click: fire
+    clearTimeout(_ksTimer);
+    _ksArmed = false;
+    btn.classList.remove('armed');
+    btn.textContent = '🚨 KILL SWITCH';
+    executeKillSwitch();
+  }
+}
+
+async function executeKillSwitch() {
+  const overlay = document.getElementById('ks-overlay');
+  const body    = document.getElementById('ks-body');
+  body.innerHTML = '<div class="ks-row ks-spin">⏳ Ejecutando kill switch...</div>';
+  overlay.classList.add('show');
+
+  try {
+    const r = await fetch('/api/emergency-stop', {method: 'POST'});
+    const d = await r.json();
+
+    let html = '';
+    html += `<div class="ks-row ${d.scanner === 'stopped' ? 'ks-ok' : 'ks-err'}">
+               ${d.scanner === 'stopped' ? '✅' : '❌'} Scanner: ${d.scanner ?? 'error'}
+             </div>`;
+    html += `<div class="ks-row ks-ok">✅ Órdenes canceladas: ${d.orders_cancelled?.length ?? 0}</div>`;
+
+    if (d.positions_closed?.length > 0) {
+      html += `<div class="ks-row ks-ok">✅ Posiciones cerradas: ${d.positions_closed.length}</div>`;
+      d.positions_closed.forEach(p => {
+        const pnl   = p.unrealized_pnl >= 0 ? `+$${p.unrealized_pnl.toFixed(2)}` : `-$${Math.abs(p.unrealized_pnl).toFixed(2)}`;
+        const color = p.unrealized_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        html += `<div class="ks-row" style="padding-left:20px;color:${color}">
+                   • ${p.ticker} — ${p.status} (P&L ${pnl})
+                 </div>`;
+      });
+    } else {
+      html += '<div class="ks-row" style="color:var(--muted)">— Sin posiciones abiertas</div>';
+    }
+
+    if (d.errors?.length > 0) {
+      html += `<div class="ks-row ks-err">⚠️ Errores: ${d.errors.join(', ')}</div>`;
+    }
+
+    html += `<div class="ks-row" style="color:var(--muted);margin-top:8px;font-size:11px">📨 Telegram enviado · Log: logs/emergency.log</div>`;
+    body.innerHTML = html;
+    refreshAll();
+  } catch(e) {
+    body.innerHTML = `<div class="ks-row ks-err">❌ Error de red: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

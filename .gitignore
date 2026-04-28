@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.pyc
+ml_models/
+*.log
+bot_output.log
+cooldown.json
+trailing_state.json
+audit_state.json
+backtest_reports/
+backtest_results.csv
+backtest_gld_equity.png
+*.png
+
+# Credentials / scratch test files
+test_alpaca.py
+
+# Claude Code internal state
+.claude/
+
+# Logs directory
+logs/

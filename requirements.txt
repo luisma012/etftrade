@@ -1,0 +1,26 @@
+# requirements.txt — ETF Trader (no LLM)
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+flask>=3.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# ── Data & Market ─────────────────────────────────────────────────────────────
+yfinance>=0.2.36
+pandas>=2.1.0
+# IMPORTANT: keep numpy < 2.3 for numba/xgboost compatibility
+numpy>=1.26.0,<2.3
+
+# ── Machine Learning ──────────────────────────────────────────────────────────
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+
+# ── Brokers ───────────────────────────────────────────────────────────────────
+robin-stocks>=3.0.0          # Robinhood
+alpaca-py>=0.20.0            # Alpaca Markets
+
+# ── Timezone ─────────────────────────────────────────────────────────────────
+pytz>=2024.1
+
+# ── NLP / Sentiment ───────────────────────────────────────────────────────────
+vaderSentiment>=3.3.2
