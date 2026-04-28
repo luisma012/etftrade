@@ -312,20 +312,24 @@ def close_position(
     qty: float | None = None,
     stop_loss: bool = False,
     extra_msg: str | None = None,
+    avg_entry_price: float | None = None,
 ) -> dict:
     """Centralized position close. Single owner of: broker.sell, fill confirmation,
     cooldown write, trailing_state cleanup, and Telegram alert.
 
     Args:
-        ticker:    symbol to close.
-        reason:    one of VALID_CLOSE_REASONS.
-        qty:       shares to sell. None = close entire position.
-        stop_loss: True applies the extended SL cooldown (COOLDOWN_SL_HOURS).
-        extra_msg: optional context appended to the Telegram alert.
+        ticker:          symbol to close.
+        reason:          one of VALID_CLOSE_REASONS.
+        qty:             shares to sell. None = close entire position.
+        stop_loss:       True applies the extended SL cooldown (COOLDOWN_SL_HOURS).
+        extra_msg:       optional context appended to the Telegram alert.
+        avg_entry_price: original entry price; when provided and fill is confirmed,
+                         realized_pnl = (fill_price - avg_entry_price) * fill_qty
+                         is included in the return dict and Telegram alert.
 
     Returns:
-        {"success": bool, "fill_price": float|None,
-         "fill_qty": float|None, "error_msg": str|None}
+        {"success": bool, "fill_price": float|None, "fill_qty": float|None,
+         "realized_pnl": float|None, "error_msg": str|None}
 
     Contract:
         - State (cooldown + trailing_state) is mutated ONLY after broker.sell
@@ -360,10 +364,11 @@ def close_position(
             f"Error: {err}"
         )
         return {
-            "success":    False,
-            "fill_price": None,
-            "fill_qty":   None,
-            "error_msg":  err,
+            "success":        False,
+            "fill_price":     None,
+            "fill_qty":       None,
+            "realized_pnl":   None,
+            "error_msg":      err,
         }
 
     # Poll for fill confirmation (paper: instant; live market: ~1s).
@@ -383,6 +388,11 @@ def close_position(
             except Exception as poll_err:  # noqa: BLE001 - polling, broker can flake
                 logger.debug(f"[{ticker}] fill poll error: {poll_err}")
             time.sleep(0.5)
+
+    # Realized P&L — only when avg_entry_price provided and fill confirmed.
+    realized_pnl: float | None = None
+    if avg_entry_price and fill_price is not None and fill_qty is not None:
+        realized_pnl = round((fill_price - avg_entry_price) * fill_qty, 2)
 
     # State cleanup — only reached if broker.sell succeeded.
     write_cooldown(ticker, stop_loss=stop_loss)
@@ -404,20 +414,25 @@ def close_position(
         f"Razón: <code>{reason}</code>\n"
         f"Cantidad: {qty_str}  |  Fill: {fill_str}"
     )
+    if realized_pnl is not None:
+        sign = "+" if realized_pnl >= 0 else ""
+        msg += f"\nRealizado: <b>${sign}{realized_pnl:.2f}</b>"
     if extra_msg:
         msg += f"\n{extra_msg}"
     _tg_send(msg)
 
     logger.info(
         f"[{ticker}] close_position OK ({reason}): "
-        f"fill_price={fill_price} fill_qty={fill_qty} order_id={order_id}"
+        f"fill_price={fill_price} fill_qty={fill_qty} "
+        f"realized_pnl={realized_pnl} order_id={order_id}"
     )
 
     return {
-        "success":    True,
-        "fill_price": fill_price,
-        "fill_qty":   fill_qty,
-        "error_msg":  None,
+        "success":        True,
+        "fill_price":     fill_price,
+        "fill_qty":       fill_qty,
+        "realized_pnl":   realized_pnl,
+        "error_msg":      None,
     }
 
 

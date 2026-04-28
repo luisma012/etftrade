@@ -256,5 +256,86 @@ class AutoSellPathTest(CloseFnTestBase):
         self.assertIn("712.34", kwargs.get("extra_msg", ""))
 
 
+class RealizedPnlTests(CloseFnTestBase):
+    """realized_pnl = (fill_price - avg_entry_price) * fill_qty."""
+
+    def test_realized_pnl_in_result_and_telegram(self):
+        broker_mock = MagicMock()
+        broker_mock.sell.return_value = {"status": "ok", "order_id": "ord-pnl"}
+        broker_mock.get_order_status.return_value = {
+            "filled_avg_price": 115.0,
+            "filled_qty":       5.0,
+        }
+
+        with patch.dict("sys.modules", {"broker": broker_mock}), \
+             patch.object(scanner, "_tg_send") as tg, \
+             patch.object(scanner, "write_cooldown"):
+            result = scanner.close_position(
+                "QQQ",
+                reason="manual_sell",
+                avg_entry_price=100.0,
+            )
+
+        # (115.0 - 100.0) * 5.0 = 75.0
+        self.assertTrue(result["success"])
+        self.assertAlmostEqual(result["realized_pnl"], 75.0)
+
+        # Telegram must mention the realized amount
+        sent = tg.call_args[0][0]
+        self.assertIn("$+75.00", sent)
+
+    def test_realized_pnl_negative(self):
+        broker_mock = MagicMock()
+        broker_mock.sell.return_value = {"status": "ok", "order_id": "ord-loss"}
+        broker_mock.get_order_status.return_value = {
+            "filled_avg_price": 90.0,
+            "filled_qty":       10.0,
+        }
+
+        with patch.dict("sys.modules", {"broker": broker_mock}), \
+             patch.object(scanner, "_tg_send") as tg, \
+             patch.object(scanner, "write_cooldown"):
+            result = scanner.close_position(
+                "XLE",
+                reason="trailing_stop",
+                stop_loss=True,
+                avg_entry_price=100.0,
+            )
+
+        # (90.0 - 100.0) * 10.0 = -100.0
+        self.assertAlmostEqual(result["realized_pnl"], -100.0)
+        sent = tg.call_args[0][0]
+        self.assertIn("$-100.00", sent)
+
+    def test_no_avg_entry_price_gives_none(self):
+        broker_mock = MagicMock()
+        broker_mock.sell.return_value = {"status": "ok", "order_id": "ord-nopnl"}
+        broker_mock.get_order_status.return_value = {
+            "filled_avg_price": 200.0,
+            "filled_qty":       3.0,
+        }
+
+        with patch.dict("sys.modules", {"broker": broker_mock}), \
+             patch.object(scanner, "_tg_send") as tg, \
+             patch.object(scanner, "write_cooldown"):
+            result = scanner.close_position("GLD", reason="manual_sell")
+
+        self.assertIsNone(result["realized_pnl"])
+        sent = tg.call_args[0][0]
+        self.assertNotIn("Realizado", sent)
+
+    def test_failure_result_has_realized_pnl_none(self):
+        broker_mock = MagicMock()
+        broker_mock.sell.return_value = {"status": "error", "message": "no position"}
+
+        with patch.dict("sys.modules", {"broker": broker_mock}), \
+             patch.object(scanner, "_tg_send"), \
+             patch.object(scanner, "write_cooldown"):
+            result = scanner.close_position("SPY", reason="manual_sell", avg_entry_price=500.0)
+
+        self.assertFalse(result["success"])
+        self.assertIsNone(result["realized_pnl"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

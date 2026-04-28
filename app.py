@@ -483,25 +483,34 @@ def api_emergency_stop():
         results["errors"].append(msg)
 
     # 3. Sell all open positions via close_position so trailing_state and
-    # cooldown stay consistent. Note: unrealized_pnl logged here is a
-    # snapshot at command time; the realized P&L is the difference between
-    # avg_entry and the actual fill_price returned below (relevant when
-    # market is closed and the order queues for next-open fill).
+    # cooldown stay consistent. avg_buy_price is passed so close_position
+    # can compute realized_pnl = (fill_price - avg_entry) * fill_qty.
+    # unrealized_pnl is also recorded as a snapshot for comparison.
     try:
         positions = broker.get_positions()
         for ticker, pos in positions.items():
-            r        = close_position(ticker, reason="emergency_stop")
-            status   = "ok" if r["success"] else "error"
-            pnl      = pos.get("unrealized_pnl", 0)
-            fp       = r["fill_price"]
-            fp_str   = f"${fp:.2f}" if fp is not None else "pending"
+            r        = close_position(
+                ticker,
+                reason="emergency_stop",
+                avg_entry_price=pos.get("avg_buy_price"),
+            )
+            status     = "ok" if r["success"] else "error"
+            unrealized = pos.get("unrealized_pnl", 0)
+            fp         = r["fill_price"]
+            fp_str     = f"${fp:.2f}" if fp is not None else "pending"
+            realized   = r.get("realized_pnl")
+            if realized is not None:
+                pnl_str = f"realized ${realized:+.2f} (snapshot unrealized ${unrealized:.2f})"
+            else:
+                pnl_str = f"unrealized ${unrealized:.2f} (fill pending)"
             log_lines.append(
-                f"SELL {ticker} (P&L unrealized ${pnl:.2f}, fill={fp_str}): {status}"
+                f"SELL {ticker} ({pnl_str}, fill={fp_str}): {status}"
             )
             results["positions_closed"].append({
                 "ticker":         ticker,
                 "status":         status,
-                "unrealized_pnl": pnl,
+                "unrealized_pnl": unrealized,
+                "realized_pnl":   realized,
                 "fill_price":     fp,
                 "fill_qty":       r["fill_qty"],
                 "error_msg":      r["error_msg"],
@@ -521,7 +530,12 @@ def api_emergency_stop():
         f"Posiciones cerradas: {n_positions}",
     ]
     for p in results["positions_closed"]:
-        tg_lines.append(f"  • {p['ticker']} → {p['status']}  P&L ${p['unrealized_pnl']:.2f}")
+        rpnl = p.get("realized_pnl")
+        if rpnl is not None:
+            pnl_disp = f"${rpnl:+.2f} realizado"
+        else:
+            pnl_disp = f"${p['unrealized_pnl']:.2f} (unrealizado)"
+        tg_lines.append(f"  • {p['ticker']} → {p['status']}  P&L {pnl_disp}")
     if results["errors"]:
         tg_lines.append(f"⚠️ Errores: {len(results['errors'])}")
     tg_lines.append(f"Hora UTC: {ts}")
